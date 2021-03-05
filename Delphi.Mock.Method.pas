@@ -20,6 +20,11 @@ type
     constructor Create;
   end;
 
+  ENonVirtualMethod = class(Exception)
+  public
+    constructor Create(Method: TRttiMethod);
+  end;
+
   ERegisteredMethodsButDifferentParameters = class(Exception)
   public
     constructor Create;
@@ -88,6 +93,8 @@ type
 
     procedure SetItParams(const Value: TArray<IIt>);
     procedure SetMethod(const Value: TRttiMethod);
+  public
+    property Method: TRttiMethod read GetMethod write SetMethod;
   end;
 
   TMethodInfoWillExecute = class(TMethodInfo, IMethod)
@@ -127,6 +134,12 @@ type
   end;
 
   TMethodInfoExpectOnce = class(TMethodInfoCounter, IMethodExpect)
+  public
+    function CheckExpectation: String;
+    function ExceptationExecuted: Boolean;
+  end;
+
+  TMethodInfoExpectNever = class(TMethodInfoCounter, IMethodExpect)
   public
     function CheckExpectation: String;
     function ExceptationExecuted: Boolean;
@@ -195,7 +208,7 @@ end;
 
 function TMethodInfoExpectOnce.CheckExpectation: String;
 const
-  EXPECT_MESSAGE = 'Expected to call once the method but %s';
+  EXPECT_MESSAGE = 'Expected to call the method "%s" once but %s';
 
 begin
   if FExecutionCount = 1 then
@@ -207,7 +220,7 @@ begin
     else
       Result := Format('was called %d times', [FExecutionCount]);
 
-    Result := Format(EXPECT_MESSAGE, [Result]);
+    Result := Format(EXPECT_MESSAGE, [Method.Name, Result]);
   end;
 end;
 
@@ -284,6 +297,9 @@ begin
   try
     if not Assigned(FMethodRegistering) then
       raise EDidNotCallTheStartRegister.Create;
+
+    if not (Method.DispatchKind in [dkVtable, dkDynamic, dkInterface]) then
+      raise ENonVirtualMethod.Create(Method);
 
     if Length(GItParams) <> Length(Method.GetParameters) then
       raise EParamsRegisteredMismatch.Create;
@@ -384,6 +400,28 @@ end;
 procedure TMethodInfoExcept.Execute(const Params: TArray<TValue>; out Result: TValue);
 begin
   FExceptationExecuted := True;
+end;
+
+{ ENonVirtualMethod }
+
+constructor ENonVirtualMethod.Create(Method: TRttiMethod);
+begin
+  inherited CreateFmt('The method "%s" can''t be static!', [Method.Name]);
+end;
+
+{ TMethodInfoExpectNever }
+
+function TMethodInfoExpectNever.CheckExpectation: String;
+begin
+  if FExecutionCount = 0 then
+    Result := EmptyStr
+  else
+    Result := Format('Expected to never be called the procedure "%s", but was called %d times', [Method.Name, FExecutionCount]);
+end;
+
+function TMethodInfoExpectNever.ExceptationExecuted: Boolean;
+begin
+  Result := True;
 end;
 
 end.

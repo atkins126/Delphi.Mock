@@ -54,6 +54,14 @@ type
     procedure TheMethodExpectOneMustReturnTrueAlwayWhenCheckingIfWasExecuted;
     [Test]
     procedure WhenRegisteringAMethodAndAnErrorIsRaisedTheGlobalVarOfItsMustBeReseted;
+    [Test]
+    procedure WhenTheMethodBeingRegisteredCannotBeOverrideItHasToGiveError;
+    [Test]
+    procedure IfTheNeverCallIsExecutedMustReturnTheExpectationError;
+    [Test]
+    procedure IfTheNeverCallIsNotExecutedMustReturnTheExpectationEmpty;
+    [Test]
+    procedure TheNeverCallExpectationMustReturnTrueInTheCheckExecuted;
   end;
 
   TMyMethod = class(TMethodInfo, IMethod)
@@ -79,9 +87,10 @@ type
 
   TMyClass = class
   public
-    procedure AnyProcedure;
-    procedure AnotherProcedure(Param: String; Param2: Integer);
-    procedure MyProcedure(Param: String);
+    procedure AnyProcedure; virtual;
+    procedure AnotherProcedure(Param: String; Param2: Integer); dynamic;
+    procedure MyProcedure(Param: String); virtual;
+    procedure NonVirtualProcedure;
   end;
 
 implementation
@@ -147,6 +156,29 @@ begin
   MethodRegister.Free;
 end;
 
+procedure TMethodRegisterTest.IfTheNeverCallIsExecutedMustReturnTheExpectationError;
+begin
+  var Method := TMethodInfoExpectNever.Create;
+  Method.Method := TRttiContext.Create.GetType(TMyClass).GetMethod('AnyProcedure');
+  var Value := TValue.Empty;
+
+  for var A := 1 to 10 do
+    Method.Execute(nil, Value);
+
+  Assert.AreEqual('Expected to never be called the procedure "AnyProcedure", but was called 10 times', Method.CheckExpectation);
+
+  Method.Free;
+end;
+
+procedure TMethodRegisterTest.IfTheNeverCallIsNotExecutedMustReturnTheExpectationEmpty;
+begin
+  var Method := TMethodInfoExpectNever.Create;
+
+  Assert.AreEqual(EmptyStr, Method.CheckExpectation);
+
+  Method.Free;
+end;
+
 procedure TMethodRegisterTest.TheMethodCountMustIncByOneEveryTimeTheProcedureIsCalled;
 begin
   var Method := TMethodInfoCounter.Create;
@@ -169,11 +201,21 @@ begin
   Method.Free;
 end;
 
+procedure TMethodRegisterTest.TheNeverCallExpectationMustReturnTrueInTheCheckExecuted;
+begin
+  var Method := TMethodInfoExpectNever.Create;
+
+  Assert.IsTrue(Method.ExceptationExecuted);
+
+  Method.Free;
+end;
+
 procedure TMethodRegisterTest.TheOneMethodWhenNotExecutedMustReturnMessageInExpectation;
 begin
-  var Method := TMethodInfoExpectOnce.Create;
+  var Method:= TMethodInfoExpectOnce.Create;
+  Method.Method := TRttiContext.Create.GetType(TMyClass).GetMethod('AnyProcedure');
 
-  Assert.AreEqual('Expected to call once the method but never called', Method.CheckExpectation);
+  Assert.AreEqual('Expected to call the method "AnyProcedure" once but never called', Method.CheckExpectation);
 
   Method.Free;
 end;
@@ -231,24 +273,23 @@ end;
 
 procedure TMethodRegisterTest.WhenAProcedureIsLoggedButNotExecutedByParameterDifferenceHasToGiveAnError;
 begin
+  var Context := TRttiContext.Create;
+  var Method := Context.GetType(TMyClass).GetMethod('MyProcedure');
   var MethodRegister := TMethodRegister.Create;
+  var MyMethod: IMethod := TMyMethod.Create;
+  var Result: TValue;
+
+  MethodRegister.StartRegister(MyMethod);
+
+  MyMethod := nil;
+
+  It.IsEqualTo('abc');
+
+  MethodRegister.RegisterMethod(Method);
 
   Assert.WillRaise(
     procedure
     begin
-      var Context := TRttiContext.Create;
-      var Method := Context.GetType(TMyClass).GetMethod('MyProcedure');
-      var MyMethod: IMethod := TMyMethod.Create;
-      var Result: TValue;
-
-      MethodRegister.StartRegister(MyMethod);
-
-      MyMethod := nil;
-
-      It.IsEqualTo('abc');
-
-      MethodRegister.RegisterMethod(Method);
-
       MethodRegister.ExecuteMethod(Method, ['zzz'], Result);
     end, ERegisteredMethodsButDifferentParameters);
 
@@ -467,6 +508,24 @@ begin
   MethodRegister.Free;
 end;
 
+procedure TMethodRegisterTest.WhenTheMethodBeingRegisteredCannotBeOverrideItHasToGiveError;
+begin
+  var MethodRegister := TMethodRegister.Create;
+
+  Assert.WillRaise(
+    procedure
+    begin
+      var Context := TRttiContext.Create;
+      var MyMethod := TMyMethod.Create;
+
+      MethodRegister.StartRegister(MyMethod);
+
+      MethodRegister.RegisterMethod(Context.GetType(TMyClass).GetMethod('NonVirtualProcedure'));
+    end, ENonVirtualMethod);
+
+  MethodRegister.Free;
+end;
+
 procedure TMethodRegisterTest.WhenTheNumberOfParametersRecordedIsDifferentFromTheAmountOfParametersTheProcedureHasToRaiseAnError;
 begin
   var MethodRegister := TMethodRegister.Create;
@@ -492,12 +551,13 @@ end;
 procedure TMethodRegisterTest.WhenTheOnceMethodIsCalledMoreThenOneTimeMustRegisterInTheMessageTheQuantityOsCalls;
 begin
   var Method := TMethodInfoExpectOnce.Create;
+  Method.Method := TRttiContext.Create.GetType(TMyClass).GetMethod('AnyProcedure');
   var Value := TValue.Empty;
 
   for var A := 1 to 10 do
     Method.Execute(nil, Value);
 
-  Assert.AreEqual('Expected to call once the method but was called 10 times', Method.CheckExpectation);
+  Assert.AreEqual('Expected to call the method "AnyProcedure" once but was called 10 times', Method.CheckExpectation);
 
   Method.Free;
 end;
@@ -551,6 +611,11 @@ begin
 end;
 
 procedure TMyClass.MyProcedure(Param: String);
+begin
+
+end;
+
+procedure TMyClass.NonVirtualProcedure;
 begin
 
 end;
