@@ -62,6 +62,12 @@ type
     procedure IfTheNeverCallIsNotExecutedMustReturnTheExpectationEmpty;
     [Test]
     procedure TheNeverCallExpectationMustReturnTrueInTheCheckExecuted;
+    [Test]
+    procedure WhenRegistredAExpectationAndANormalProcedureMustExecuteBothMethods;
+    [Test]
+    procedure TheExecutionCountExpectationIsNotEqualToExpectationMustReturnThenDiferencesOfCalls;
+    [Test]
+    procedure IfTheExecutionCountExpectationIsEqualToExpectationMustReturnAEmptyString;
   end;
 
   TMyMethod = class(TMethodInfo, IMethod)
@@ -87,6 +93,8 @@ type
 
   TMyClass = class
   public
+    function MyFunction: Integer; virtual;
+
     procedure AnyProcedure; virtual;
     procedure AnotherProcedure(Param: String; Param2: Integer); dynamic;
     procedure MyProcedure(Param: String); virtual;
@@ -129,6 +137,20 @@ begin
     end, EDidNotCallTheStartRegister);
 
   MethodRegister.Free;
+end;
+
+procedure TMethodRegisterTest.IfTheExecutionCountExpectationIsEqualToExpectationMustReturnAEmptyString;
+begin
+  var Method := TMethodInfoExpectExecutionCount.Create(10);
+  Method.Method := TRttiContext.Create.GetType(TMyClass).GetMethod('AnyProcedure');
+  var Value := TValue.Empty;
+
+  for var A := 1 to 10 do
+    Method.Execute(nil, Value);
+
+  Assert.AreEqual(EmptyStr, Method.CheckExpectation);
+
+  Method.Free;
 end;
 
 procedure TMethodRegisterTest.IfTheMethodFoundIsAnExpectationCanNotGiveAnException;
@@ -175,6 +197,20 @@ begin
   var Method := TMethodInfoExpectNever.Create;
 
   Assert.AreEqual(EmptyStr, Method.CheckExpectation);
+
+  Method.Free;
+end;
+
+procedure TMethodRegisterTest.TheExecutionCountExpectationIsNotEqualToExpectationMustReturnThenDiferencesOfCalls;
+begin
+  var Method := TMethodInfoExpectExecutionCount.Create(5);
+  Method.Method := TRttiContext.Create.GetType(TMyClass).GetMethod('AnyProcedure');
+  var Value := TValue.Empty;
+
+  for var A := 1 to 10 do
+    Method.Execute(nil, Value);
+
+  Assert.AreEqual('Expected to call the method "AnyProcedure" 5 times, but was called 10 times', Method.CheckExpectation);
 
   Method.Free;
 end;
@@ -508,6 +544,29 @@ begin
   MethodRegister.Free;
 end;
 
+procedure TMethodRegisterTest.WhenRegistredAExpectationAndANormalProcedureMustExecuteBothMethods;
+begin
+  var MethodRegister := TMethodRegister.Create;
+  var MyFunction := TRttiContext.Create.GetType(TMyClass).GetMethod('MyFunction');
+  var Return := TValue.Empty;
+
+  MethodRegister.StartRegister(TMethodInfoWillReturn.Create(200));
+
+  MethodRegister.RegisterMethod(MyFunction);
+
+  MethodRegister.StartRegister(TMethodInfoExpectOnce.Create);
+
+  MethodRegister.RegisterMethod(MyFunction);
+
+  MethodRegister.ExecuteMethod(MyFunction, nil, Return);
+
+  Assert.AreEqual(200, Return.AsInteger);
+
+  Assert.AreEqual(EmptyStr, MethodRegister.CheckExpectations);
+
+  MethodRegister.Free;
+end;
+
 procedure TMethodRegisterTest.WhenTheMethodBeingRegisteredCannotBeOverrideItHasToGiveError;
 begin
   var MethodRegister := TMethodRegister.Create;
@@ -608,6 +667,11 @@ end;
 procedure TMyClass.AnyProcedure;
 begin
 
+end;
+
+function TMyClass.MyFunction: Integer;
+begin
+  Result := 100;
 end;
 
 procedure TMyClass.MyProcedure(Param: String);
