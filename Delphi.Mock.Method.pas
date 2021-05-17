@@ -71,10 +71,11 @@ type
     FMethodRegistering: IMethod;
     FMethodExecute: TDictionary<TRttiMethod, TList<IMethod>>;
     FMethodExpect: TDictionary<TRttiMethod, TList<IMethod>>;
+    FAutoMock: Boolean;
 
     function GetExpectMethods: TArray<IMethodExpect>;
   public
-    constructor Create;
+    constructor Create(const AutoMock: Boolean);
 
     destructor Destroy; override;
 
@@ -104,9 +105,12 @@ type
 
   TMethodInfoWillExecute = class(TMethodInfo, IMethod)
   private
-    FProc: TProc;
+    FProc: TFunc<TArray<TValue>, TValue>;
   public
-    constructor Create(Proc: TProc);
+    constructor Create(Proc: TFunc<TValue>); overload;
+    constructor Create(Proc: TFunc<TArray<TValue>, TValue>); overload;
+    constructor Create(Proc: TProc); overload;
+    constructor Create(Proc: TProc<TArray<TValue>>); overload;
 
     procedure Execute(const Params: TArray<TValue>; out Result: TValue);
   end;
@@ -186,14 +190,41 @@ end;
 
 constructor TMethodInfoWillExecute.Create(Proc: TProc);
 begin
+  Create(
+    function(Params: TArray<TValue>): TValue
+    begin
+      Proc;
+    end);
+end;
+
+constructor TMethodInfoWillExecute.Create(Proc: TFunc<TArray<TValue>, TValue>);
+begin
   inherited Create;
 
   FProc := Proc;
 end;
 
+constructor TMethodInfoWillExecute.Create(Proc: TProc<TArray<TValue>>);
+begin
+  Create(
+    function(Params: TArray<TValue>): TValue
+    begin
+      Proc(Params);
+    end);
+end;
+
+constructor TMethodInfoWillExecute.Create(Proc: TFunc<TValue>);
+begin
+  Create(
+    function(Params: TArray<TValue>): TValue
+    begin
+      Result := Proc;
+    end);
+end;
+
 procedure TMethodInfoWillExecute.Execute(const Params: TArray<TValue>; out Result: TValue);
 begin
-  FProc;
+  Result := FProc(Params);
 end;
 
 { TMethodInfoWillReturn }
@@ -265,12 +296,12 @@ begin
     Result := 'No expectations executed!';
 end;
 
-constructor TMethodRegister.Create;
+constructor TMethodRegister.Create(const AutoMock: Boolean);
 begin
-  inherited;
+  inherited Create;
 
+  FAutoMock := AutoMock;
   FMethodExecute := TObjectDictionary<TRttiMethod, TList<IMethod>>.Create([doOwnsValues]);
-
   FMethodExpect := TObjectDictionary<TRttiMethod, TList<IMethod>>.Create([doOwnsValues]);
 end;
 
@@ -318,8 +349,8 @@ begin
     else if not FMethodExpect.ContainsKey(Method) then
       raise ERegisteredMethodsButDifferentParameters.Create
   end
-  else
-    raise EMethodNotRegistered.Create(Method)
+  else if not FAutoMock then
+    raise EMethodNotRegistered.Create(Method);
 end;
 
 function TMethodRegister.GetExpectMethods: TArray<IMethodExpect>;
